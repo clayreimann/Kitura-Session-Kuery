@@ -6,6 +6,7 @@
 import Foundation
 import KituraSession
 import SwiftKuery
+import LoggerAPI
 
 /// An implementation of the `Store` protocol for the storage of `Session` data Swift-Kuery.
 public class KueryStore: Store {
@@ -26,14 +27,18 @@ public class KueryStore: Store {
     }
 
     private func setupDB() {
-        self.pool.getConnection() { connection, error in
+        pool.getConnection() { [self] connection, error in
             guard let connection = connection else {
-                print("Could not create connection to database in setup.  \(error?.localizedDescription ?? "")")
+                Log.error("Could not create connection to database in setup.  \(error?.localizedDescription ?? "")")
                 return
             }
-            self.sessions.create(connection: connection) { result in
+            sessions.create(connection: connection) { [self] result in
                 guard result.success else {
-                    print("Failed to create table: \(result)")
+                    connection.execute(query: Select(from: sessions).limit(to: 1)) { result in
+                        if !result.success {
+                            Log.warning("Failed to create table: \(result)")
+                        }
+                    }
                     return
                 }
             }
@@ -42,9 +47,9 @@ public class KueryStore: Store {
 
     public func load(sessionId: String, callback: @escaping (Data?, NSError?) -> Void) {
         let query = Select(sessions.data, from: sessions).where(sessions.id == sessionId)
-        self.pool.getConnection() { connection, error in
+        pool.getConnection() { connection, error in
             guard let connection = connection else {
-                print("Could not create connection to database in all to load(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
+                Log.error("Could not create connection to database in all to load(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
                 return
             }
             connection.execute(query: query) { result in
@@ -53,9 +58,9 @@ public class KueryStore: Store {
                     return
                 }
     
-                result.asRows { rows, error in
+                result.asRows { [self] rows, error in
                     if let row = rows?.first {
-                        if let base64String = row[self.sessions.data.name] as? String, let decodedData = Data(base64Encoded: base64String) {
+                        if let base64String = row[sessions.data.name] as? String, let decodedData = Data(base64Encoded: base64String) {
                             callback(decodedData, nil)
                             return
                         }
@@ -75,9 +80,9 @@ public class KueryStore: Store {
                                     (sessions.data, dataEncoded)
                                     ], where: sessions.id == sessionId)
         let insertQuery = Insert(into: sessions, rows: [[sessionId, dataEncoded]])
-        self.pool.getConnection() { connection, error in
+        pool.getConnection() { connection, error in
             guard let connection = connection else {
-                print("Could not create connection to database in all to save(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
+                Log.error("Could not create connection to database in all to save(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
                 return
             }
             // nest update/insert until Kuery has an "upsert" command
@@ -113,9 +118,9 @@ public class KueryStore: Store {
 
     public func delete(sessionId: String, callback: @escaping (NSError?) -> Void) {
         let query = Delete(from: sessions, where: sessions.id == sessionId)
-        self.pool.getConnection() { connection, error in
+        pool.getConnection() { connection, error in
             guard let connection = connection else {
-                print("Could not create connection to database in all to delete(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
+                Log.error("Could not create connection to database in all to delete(sessionId: \(sessionId).  \(error?.localizedDescription ?? "")")
                 return
             }
             connection.execute(query: query) { result in
