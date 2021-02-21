@@ -12,7 +12,7 @@ public class KueryStore: Store {
 
     public class Sessions: Table {
         let tableName = "Sessions"
-        let id = Column("id", Char.self, primaryKey: true)
+        let id = Column("id", Char.self, length: 36, primaryKey: true)
         let data = Column("data", String.self)
     }
 
